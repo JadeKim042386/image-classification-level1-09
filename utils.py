@@ -1,3 +1,4 @@
+import random
 import torch
 import numpy as np
 
@@ -49,8 +50,13 @@ class EarlyStopping:
         self.val_loss_min = val_loss
 
 class CutMix:
+    def __init__(self, images, activate_cutmix):
+        self.images = images # 현재 배치의 이미지들
+        self.activate_cutmix = activate_cutmix # cutmix 수행 여부(list)
+        self.lam = 1 #lamda
+        self.rand_indexs = []
 
-    def rand_bbox(self, size, lam): # size : [B, C, W, H]
+    def _rand_bbox(self, size, lam): # size : [B, C, W, H]
         W = size[2] # 이미지의 width
         H = size[3] # 이미지의 height
         cut_rat = np.sqrt(1. - lam)  # 패치 크기의 비율 정하기
@@ -70,12 +76,48 @@ class CutMix:
 
         return bbx1, bby1, bbx2, bby2
 
-    def cutmix(self, image):
-        lam = np.random.beta(1.0, 1.0) 
-        rand_index = torch.randperm(image.size()[0])
-        bbx1, bby1, bbx2, bby2 = self.rand_bbox(image.size(), lam)
-        image[:, :, bbx1:bbx2, bby1:bby2] = image[rand_index, :, bbx1:bbx2, bby1:bby2]
-        return image
+    def cutmix(self, idx):
+        lam = np.random.beta(1.0, 1.0)
+        rand_index = random.choice(range(self.images.size()[0])) # 추출할 대상 index 한 개를 random 선택
+        bbx1, bby1, bbx2, bby2 = self._rand_bbox(self.images.size(), lam) #random한 bbox 좌표 추출
+        self.images[idx, :, bbx1:bbx2, bby1:bby2] = self.images[rand_index, :, bbx1:bbx2, bby1:bby2]
+        self.lam = 1 - ((bbx2-bbx1) * (bby2-bby1) / (self.images.size()[-1] * self.images.size()[-2])) # 1 - bbox의 넓이 / 이미지의 넓이 = bbox를 제외한 나머지 비중
+        self.rand_indexs.append(rand_index) # bbox에 해당하는 이미지의 index 기록
 
-    def __call__(self, iamge):
-        return self.cutmix(iamge)
+    def __call__(self):
+        for idx, _ in enumerate(self.images):
+            # False면 cutmix 실행 X
+            if not self.activate_cutmix[idx]:
+                self.rand_indexs.append(idx)
+                continue
+            # cutmix=True일때
+            self.cutmix(idx)
+        return self.images, self.lam, self.rand_indexs
+
+class CutMix_half:
+    def __init__(self, images, activate_cutmix):
+        self.images = images # 현재 배치의 이미지들
+        self.activate_cutmix = activate_cutmix # cutmix 수행 여부(list)
+        self.lam = 0.5 #lamda
+        self.rand_indexs = []
+
+    def _rand_bbox(self, size): # size : [B, C, W, H]
+        W = size[2] # 이미지의 width
+
+        return W // 2
+
+    def cutmix(self, idx):
+        rand_index = random.choice(range(self.images.size()[0])) # 추출할 대상 index 한 개를 random 선택
+        half = self._rand_bbox(self.images.size()) #random한 bbox 좌표 추출
+        self.images[idx, :, :, half // 2:] = self.images[rand_index, :, :, half // 2:]
+        self.rand_indexs.append(rand_index) # bbox에 해당하는 이미지의 index 기록
+
+    def __call__(self):
+        for idx, _ in enumerate(self.images):
+            # False면 cutmix 실행 X
+            if not self.activate_cutmix[idx]:
+                self.rand_indexs.append(idx)
+                continue
+            # cutmix=True일때
+            self.cutmix(idx)
+        return self.images, self.lam, self.rand_indexs

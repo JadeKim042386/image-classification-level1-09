@@ -53,7 +53,7 @@ class F1Loss(nn.Module):
         y_pred = F.softmax(y_pred, dim=1)
 
         tp = (y_true * y_pred).sum(dim=0).to(torch.float32)
-        tn = ((1 - y_true) * (1 - y_pred)).sum(dim=0).to(torch.float32)
+        # tn = ((1 - y_true) * (1 - y_pred)).sum(dim=0).to(torch.float32)
         fp = ((1 - y_true) * y_pred).sum(dim=0).to(torch.float32)
         fn = (y_true * (1 - y_pred)).sum(dim=0).to(torch.float32)
 
@@ -63,7 +63,6 @@ class F1Loss(nn.Module):
         f1 = 2 * (precision * recall) / (precision + recall + self.epsilon)
         f1 = f1.clamp(min=self.epsilon, max=1 - self.epsilon)
         return 1 - f1.mean()
-
 
 _criterion_entrypoints = {
     'cross_entropy': nn.CrossEntropyLoss,

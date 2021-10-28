@@ -1,8 +1,12 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torchvision
+
+import math
 import timm
 from efficientnet_pytorch import EfficientNet
+
 
 class BaseModel(nn.Module):
     def __init__(self, num_classes):
@@ -36,49 +40,118 @@ class BaseModel(nn.Module):
 
 
 # Custom Model Template
-# CNN (EfficientNet)
-class EFF00(nn.Module):
+class MyModel(nn.Module):
     def __init__(self, num_classes):
         super().__init__()
-        self.model = EfficientNet.from_pretrained('efficientnet-b0', num_classes = num_classes)
+
+        """
+        1. 위와 같이 생성자의 parameter 에 num_claases 를 포함해주세요.
+        2. 나만의 모델 아키텍쳐를 디자인 해봅니다.
+        3. 모델의 output_dimension 은 num_classes 로 설정해주세요.
+        """
 
     def forward(self, x):
-        x = self.model(x)
+        """
+        1. 위에서 정의한 모델 아키텍쳐를 forward propagation 을 진행해주세요
+        2. 결과로 나온 output 을 return 해주세요
+        """
         return x
 
-class EFF05(nn.Module):
-    def __init__(self, num_classes):
+# Resnet 50
+class resnet50(nn.Module):
+    def __init__(self, num_classes, freeze):
         super().__init__()
-        self.model = EfficientNet.from_pretrained('efficientnet-b5', num_classes = num_classes)
+        self.freeze = freeze
+        self.resnet50 = torchvision.models.resnet50(pretrained=True)
+        self.resnet50.fc = torch.nn.Linear(in_features=2048, out_features=num_classes, bias=True)
+        self.init_param()
+
+    def init_param(self):
+        torch.nn.init.kaiming_uniform_(self.resnet50.fc.weight)
+        stdv = 1./math.sqrt(self.resnet50.fc.weight.size(1))
+        self.resnet50.fc.bias.data.uniform_(-stdv, stdv)
+        if self.freeze:
+            for param in self.resnet50.parameters():
+                param.requies_grad = False
 
     def forward(self, x):
-        x = self.model(x)
-        return x
+        return self.resnet50(x)
 
-class EFF07(nn.Module):
-    def __init__(self, num_classes):
+# Resnet 152
+class resnet152(nn.Module):
+    def __init__(self, num_classes, freeze):
         super().__init__()
-        self.model = EfficientNet.from_pretrained('efficientnet-b7', num_classes = num_classes)
+        self.freeze = freeze
+        self.resnet152 = torchvision.models.resnet152(pretrained=True)
+        self.resnet152.fc = torch.nn.Linear(in_features=2048, out_features=num_classes, bias=True)
+        self.init_param()
+
+    def init_param(self):
+        torch.nn.init.kaiming_uniform_(self.resnet152.fc.weight)
+        stdv = 1./math.sqrt(self.resnet152.fc.weight.size(1))
+        self.resnet152.fc.bias.data.uniform_(-stdv, stdv)
+        if self.freeze:
+            for param in self.resnet152.parameters():
+                param.requies_grad = False
 
     def forward(self, x):
-        x = self.model(x)
-        return x
+        return self.resnet152(x)
 
-# Transformer (EfficientNet)
-class SWIN_LARGE(nn.Module):
-    def __init__(self, num_classes):
+
+# dm_nfnet_f3
+class dm_nfnet_f3(nn.Module):
+    def __init__(self, num_classes, freeze):
         super().__init__()
-        self.model = timm.create_model("swin_large_patch4_window7_224", pretrained=True, num_classes = num_classes)
+        self.freeze = freeze
+        self.dm_nfnet_f3 = timm.create_model('dm_nfnet_f3', pretrained=True, num_classes=18)
+        self.init_param()
+
+    def init_param(self):
+        torch.nn.init.kaiming_uniform_(self.dm_nfnet_f3.head.fc.weight)
+        stdv = 1./math.sqrt(self.dm_nfnet_f3.head.fc.weight.size(1))
+        self.dm_nfnet_f3.head.fc.bias.data.uniform_(-stdv, stdv)
+        if self.freeze:
+            for param in self.dm_nfnet_f3.parameters():
+                param.requies_grad = False
 
     def forward(self, x):
-        x = self.model(x)
-        return x
+        return self.dm_nfnet_f3(x)
 
-class CAIT_S24(nn.Module):
-    def __init__(self, num_classes):
+# swin_large_patch4_window7_224
+class swin_large_patch4_window7_224(nn.Module):
+    def __init__(self, num_classes, freeze):
         super().__init__()
-        self.model = timm.create_model("cait_s24_224", pretrained=True, num_classes = num_classes)
+        self.freeze = freeze
+        self.model = timm.create_model('swin_large_patch4_window7_224', pretrained=True, num_classes=18)
+        self.init_param()
+
+    def init_param(self):
+        torch.nn.init.kaiming_uniform_(self.model.head.weight)
+        stdv = 1./math.sqrt(self.model.head.weight.size(1))
+        self.model.head.bias.data.uniform_(-stdv, stdv)
+        if self.freeze:
+            for param in self.model.parameters():
+                param.requies_grad = False
 
     def forward(self, x):
-        x = self.model(x)
-        return x
+        return self.model(x)
+
+# efficientnet_b7
+class efficientnet_b7(nn.Module):
+    def __init__(self, num_classes, freeze):
+        super().__init__()
+        self.freeze = freeze
+        self.model = EfficientNet.from_pretrained('efficientnet-b7')
+        self.model._fc = torch.nn.Linear(in_features=2560, out_features=num_classes, bias=True)
+        self.init_param()
+
+    def init_param(self):
+        torch.nn.init.kaiming_uniform_(self.model._fc.weight)
+        stdv = 1./math.sqrt(self.model._fc.weight.size(1))
+        self.model._fc.bias.data.uniform_(-stdv, stdv)
+        if self.freeze:
+            for param in self.model.parameters():
+                param.requies_grad = False
+
+    def forward(self, x):
+        return self.model(x)
