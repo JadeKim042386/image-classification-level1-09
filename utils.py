@@ -1,6 +1,59 @@
+import re
+import glob
 import random
 import torch
 import numpy as np
+from pathlib import Path
+from GPUtil import showUtilization as gpu_usage
+
+def empty_cache()->None:
+    """
+    GPU cache를 비우는 함수
+    """
+    print("Initial GPU Usage") 
+    gpu_usage() 
+    print("GPU Usage after emptying the cache") 
+    torch.cuda.empty_cache() 
+    gpu_usage()
+
+def seed_everything(seed:int)->None:
+    """
+    random seed를 고정하기위한 함수
+    """
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)  # if use multi-GPU
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    np.random.seed(seed)
+    random.seed(seed)
+
+def get_lr(optimizer):
+    """
+    optimizer에서 현재 learning rate를 가져오는 함수
+
+    Args:
+        optimizer : 현재 사용하는 optimizer
+    """
+    for param_group in optimizer.param_groups:
+        return param_group['lr']
+
+def increment_path(path:str, exist_ok=False)->str:
+    """ 자동으로 path number를 증가시키는 함수, i.e. runs/exp --> runs/exp0, runs/exp1 etc.
+
+    Args:
+        path (str or pathlib.Path): f"{model_dir}/{args.name}".
+        exist_ok (bool): whether increment path (increment if False).
+    """
+    path = Path(path) # model_dir(./model)
+    if (path.exists() and exist_ok) or (not path.exists()):
+        return str(path)
+    else:
+        dirs = glob.glob(f"{path}*") # 지정한 패턴에 맞는 파일을 불러옴
+        matches = [re.search(rf"%s(\d+)" % path.stem, d) for d in dirs]
+        i = [int(m.groups()[0]) for m in matches if m]
+        n = max(i) + 1 if i else 2
+        return f"{path}{n}" # 뒷 부분에 숫자 + 1을 하여 return
 
 class EarlyStopping:
     """주어진 patience 이후로 validation loss가 개선되지 않으면 학습을 조기 중지"""

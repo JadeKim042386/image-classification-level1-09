@@ -1,0 +1,7 @@
+data_dir: './train/images'
+model_dir: './model'
+output_dir: './output'
+
+model: 'resnet50'
+
+num_workers: 4

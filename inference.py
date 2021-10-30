@@ -1,5 +1,6 @@
-import argparse
 import os
+import yaml
+import argparse
 from importlib import import_module
 
 import pandas as pd
@@ -10,7 +11,7 @@ from torch.utils.data import DataLoader
 from dataset import TestDataset, MaskBaseDataset
 
 def load_model(saved_model, num_classes, device):
-    model_cls = getattr(import_module("model"), args.model)
+    model_cls = getattr(import_module("model"), config_infer['model'])
     model = model_cls(
         num_classes=num_classes,
         freeze = True
@@ -25,17 +26,17 @@ def load_model(saved_model, num_classes, device):
 
 
 @torch.no_grad()
-def inference(data_dir, model_dir, output_dir, args):
+def inference(config_infer):
 
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda" if use_cuda else "cpu")
 
     num_classes = MaskBaseDataset.num_classes  # 18
-    model = load_model(model_dir, num_classes, device).to(device)
+    model = load_model(config_infer['model_dir'], num_classes, device).to(device)
     model.eval()
 
-    img_root = os.path.join(data_dir, 'cropped_images')
-    info_path = os.path.join(data_dir, 'info.csv')
+    img_root = os.path.join(config_infer['data_dir'], 'cropped_images')
+    info_path = os.path.join(config_infer['data_dir'], 'info.csv')
     info = pd.read_csv(info_path)
 
     img_paths = [os.path.join(img_root, img_id) for img_id in info.ImageID]
@@ -48,21 +49,21 @@ def inference(data_dir, model_dir, output_dir, args):
     # -- define dataloader
     loader1 = DataLoader(
         dataset1,
-        num_workers=4,
+        num_workers=config_infer['num_workers'],
         shuffle=False,
         pin_memory=use_cuda,
         drop_last=False,
     )
     loader2 = DataLoader(
         dataset2,
-        num_workers=4,
+        num_workers=config_infer['num_workers'],
         shuffle=False,
         pin_memory=use_cuda,
         drop_last=False,
     )
     loader3 = DataLoader(
         dataset3,
-        num_workers=4,
+        num_workers=config_infer['num_workers'],
         shuffle=False,
         pin_memory=use_cuda,
         drop_last=False,
@@ -79,19 +80,19 @@ def inference(data_dir, model_dir, output_dir, args):
 
     # -- inference(TTA)
     with torch.no_grad():
-        for idx, images in enumerate(loader1):
+        for _, images in enumerate(loader1):
             images = images.to(device)
             pred = model(images)
             all_logits = np.vstack([all_logits, pred.cpu()])
             pred_1.extend((2*pred).cpu())
     with torch.no_grad():
-        for idx, images in enumerate(loader2):
+        for _, images in enumerate(loader2):
             images = images.to(device)
             pred = model(images)
             all_logits = np.vstack([all_logits, pred.cpu()])
             pred_2.extend(pred.cpu())
     with torch.no_grad():
-        for idx, images in enumerate(loader3):
+        for _, images in enumerate(loader3):
             images = images.to(device)
             pred = model(images)
             all_logits = np.vstack([all_logits, pred.cpu()])
@@ -107,30 +108,19 @@ def inference(data_dir, model_dir, output_dir, args):
         all_preds.extend(npred.cpu().numpy())
 
     info['ans'] = all_preds
-    info.to_csv(os.path.join(output_dir, f'output.csv'), index=False)
-    np.save(os.path.join(output_dir, 'logit.npy'), all_logits)
+    info.to_csv(os.path.join(config_infer['output_dir'], f'output.csv'), index=False)
+    np.save(os.path.join(config_infer['output_dir'], 'logit.npy'), all_logits)
     print(f'Inference Done!')
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-
-    # Data and model checkpoints directories
-    parser.add_argument('--batch_size', type=int, default=16, help='input batch size for validing (default: 16)')
-    parser.add_argument('--resize', type=tuple, default=(96, 128), help='resize size for image when you trained (default: (96, 128))')
-    parser.add_argument('--model', type=str, default='resnet50', help='model type (default: resnet50)')
-
-    # Container environment
-    parser.add_argument('--data_dir', type=str, default=os.environ.get('SM_CHANNEL_EVAL', '/opt/ml/input/data/eval'))
-    parser.add_argument('--model_dir', type=str, default=os.environ.get('SM_CHANNEL_MODEL', './model'))
-    parser.add_argument('--output_dir', type=str, default=os.environ.get('SM_OUTPUT_DATA_DIR', './output'))
-
+    parser.add_argument('--config_infer', type=str, help='path of inference configuration yaml file')
     args = parser.parse_args()
 
-    data_dir = args.data_dir
-    model_dir = args.model_dir
-    output_dir = args.output_dir
+    with open(args.config_infer) as f:
+        config_infer = yaml.load(f, Loader=yaml.FullLoader)
 
-    os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(config_infer['output_dir'], exist_ok=True)
 
-    inference(data_dir, model_dir, output_dir, args)
+    inference(config_infer)

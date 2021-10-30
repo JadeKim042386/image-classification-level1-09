@@ -1,0 +1,34 @@
+data_dir: './train/images'
+model_dir: './model'
+model_save_name: 'exp'
+
+model: 'efficientnet_b7'
+
+seed: 42
+num_workers: 4
+batch_size: 16
+valid_batch_size: 8
+valid_ratio: 0.2
+epochs: 20
+
+dataset: 'MaskSplitByProfileDataset'
+
+augmentation: 'CustomAugmentation'
+resize: [128, 96]
+
+optimizer: 'AdamW'
+lr: 1e-5
+lr_decay_step: 1e-5
+
+criterion: 'f1'
+log_interval: 20
+
+wandb: True
+wandb_proj: 'image_classification'
+wandb_entity: 'jujoo'
+
+earlystopping: False
+patience: 10
+verbose: True
+
+cutmix: True
